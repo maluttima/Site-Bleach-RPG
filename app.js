@@ -527,31 +527,26 @@ function playReiatsuSound(type = 'roll') {
 
 // Initial Default Database
 const DEFAULT_DB = {
-  adminSenha: "sociedade2026",
+  superAdminSenha: "maximo2026",
   superAdminNome: "ADM Máximo (Comandante Supremo)",
-  administradores: [{
-    id: "adm-1",
-    nome: "ADM Máximo",
-    cargo: "Comandante Supremo",
-    nivel: "maximo",
-    charId: "ren-001"
-  }, {
-    id: "adm-2",
+  subAdms: [{
+    id: "adm-kisuke",
+    usuario: "kisuke",
+    senha: "123",
     nome: "Mestre Kisuke",
     cargo: "Avaliador de Cenas & Fichas",
-    nivel: "menor",
     charId: "rukia-002"
   }],
   registrosTarefasAdm: [{
     id: "t1",
     admNome: "Mestre Kisuke",
-    tarefa: "Avaliação de Cenas de Arco",
+    tarefa: "Avaliação de Cenas de Arco (+8 pontos)",
     pontosGanhos: 8,
     data: "21/08/2026 às 14:00"
   }, {
     id: "t2",
     admNome: "Mestre Kisuke",
-    tarefa: "Avaliação de 7 Fichas",
+    tarefa: "Avaliação de 7 Fichas (+3 pontos)",
     pontosGanhos: 3,
     data: "20/08/2026 às 18:30"
   }],
@@ -570,7 +565,7 @@ const DEFAULT_DB = {
   iaJulgamentos: [{
     id: "ia-1",
     data: "21/08/2026 às 19:40",
-    lutador1: "Kurosaki Ren (Velocidade 48, Força 21)",
+    lutador1: "Kurosaki Ren (Velocidade 48, Força 28)",
     lutador2: "Kuchiki Rukia (Pressão 45, Velocidade 42)",
     cenaDesc: "Ren tentou golpear direto com Zanjutsu rápido enquanto Rukia conjurava Rikujō Kōrō.",
     veredito: "Veredito da IA: Devido à diferença de +6 em Velocidade de Ren, seu golpe inicial atinge antes da conjuração completa sem encantamento, porém a alta Pressão Espiritual de Rukia (45 vs 37) reduz o dano total com barreira instintiva de Reiatsu. Ambos sofrem desgaste moderado."
@@ -798,12 +793,13 @@ function App() {
       const stored = localStorage.getItem("bleachDB");
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Ensure schema updates
-        if (!parsed.administradores) parsed.administradores = DEFAULT_DB.administradores;
+        if (!parsed.superAdminSenha) parsed.superAdminSenha = DEFAULT_DB.superAdminSenha;
+        if (!parsed.subAdms) parsed.subAdms = DEFAULT_DB.subAdms;
         if (!parsed.registrosTarefasAdm) parsed.registrosTarefasAdm = DEFAULT_DB.registrosTarefasAdm;
         if (!parsed.combatesArena) parsed.combatesArena = DEFAULT_DB.combatesArena;
         if (!parsed.iaJulgamentos) parsed.iaJulgamentos = DEFAULT_DB.iaJulgamentos;
         if (!parsed.rolagensDadosPublicas) parsed.rolagensDadosPublicas = DEFAULT_DB.rolagensDadosPublicas;
+        if (!parsed.personagens || parsed.personagens.length === 0) parsed.personagens = DEFAULT_DB.personagens;
         setDb(parsed);
       } else {
         setDb(DEFAULT_DB);
@@ -832,7 +828,9 @@ function App() {
   const myChar = useMemo(() => {
     if (!db || !session) return null;
     if (session.role === "jogador") return db.personagens.find(p => p.id === session.charId) || null;
-    if (session.role === "admin" && adminCharId) return db.personagens.find(p => p.id === adminCharId) || null;
+    if ((session.role === "super_admin" || session.role === "sub_admin") && adminCharId) {
+      return db.personagens.find(p => p.id === adminCharId) || null;
+    }
     return null;
   }, [db, session, adminCharId]);
   const {
@@ -857,10 +855,10 @@ function App() {
     onLogout: logout,
     view: view,
     setView: setView,
-    nome: myChar?.nome,
+    nome: session?.role === "super_admin" ? "ADM Máximo" : session?.role === "sub_admin" ? session.nome : myChar?.nome,
     onOpenAdminLogin: () => setShowAdminLoginModal(true)
   }), saveErr && /*#__PURE__*/React.createElement("div", {
-    className: "max-w-5xl mx-auto mt-4 px-4"
+    className: "max-w-6xl mx-auto mt-4 px-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "bg-red-950/80 border border-red-600/50 text-red-200 text-sm px-4 py-3 rounded-lg flex items-center justify-between"
   }, /*#__PURE__*/React.createElement("span", null, "\u26A0\uFE0F ", saveErr), /*#__PURE__*/React.createElement("button", {
@@ -874,7 +872,7 @@ function App() {
     myCharId: myChar?.id
   }), view === "kidos" && /*#__PURE__*/React.createElement(KidosView, {
     personagem: myChar,
-    isAdmin: session?.role === "admin"
+    isAdmin: session?.role === "super_admin" || session?.role === "sub_admin"
   }), view === "arena" && /*#__PURE__*/React.createElement(ArenaView, {
     db: db,
     saveDb: saveDb,
@@ -884,7 +882,7 @@ function App() {
     db: db,
     onLogin: s => {
       setSession(s);
-      setView(s.role === "admin" ? "admin" : "ficha");
+      setView("ficha");
     },
     onOpenAdminModal: () => setShowAdminLoginModal(true)
   }) : session.role === "jogador" ? /*#__PURE__*/React.createElement(FichaView, {
@@ -898,25 +896,24 @@ function App() {
     className: "bg-bleach-panel border border-bleach-border rounded-xl p-8 text-center"
   }, /*#__PURE__*/React.createElement("p", {
     className: "text-bleach-creamDim mb-4"
-  }, "Voc\xEA est\xE1 logado como Administrador."), /*#__PURE__*/React.createElement("button", {
+  }, "Voc\xEA est\xE1 logado na Administra\xE7\xE3o (", session.role === "super_admin" ? "ADM Máximo" : session.nome, ")."), /*#__PURE__*/React.createElement("button", {
     onClick: () => setView("admin"),
     className: "px-6 py-2.5 bg-bleach-orange text-black font-bold uppercase rounded-lg shadow-lg hover:bg-orange-400 transition"
-  }, "Ir para o Painel Admin"))), view === "admin" && (!session || session.role !== "admin" ? /*#__PURE__*/React.createElement(AdminLoginScreen, {
+  }, "Ir para o Painel ADM"))), view === "admin" && (!session || session.role !== "super_admin" && session.role !== "sub_admin" ? /*#__PURE__*/React.createElement(AdminLoginScreen, {
     db: db,
-    onLoginAdmin: () => {
-      setSession({
-        role: "admin"
-      });
+    onLoginAdmin: s => {
+      setSession(s);
       setView("admin");
     }
   }) : /*#__PURE__*/React.createElement(AdminPanel, {
     db: db,
     saveDb: saveDb,
+    session: session,
     onAbrirFicha: id => {
       setAdminCharId(id);
       setView("admin-ficha");
     }
-  })), view === "admin-ficha" && session?.role === "admin" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
+  })), view === "admin-ficha" && (session?.role === "super_admin" || session?.role === "sub_admin") && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
     onClick: () => setView("admin"),
     className: "inline-flex items-center gap-2 mb-6 px-4 py-2 bg-bleach-panel border border-bleach-border rounded-lg text-sm text-bleach-creamDim hover:text-white hover:border-bleach-orange transition"
   }, "\u2190 Voltar ao Painel Admin"), myChar ? /*#__PURE__*/React.createElement(FichaView, {
@@ -941,10 +938,8 @@ function App() {
   }, /*#__PURE__*/React.createElement("span", null, "Treino em ON (30 linhas) \u2022 Zanpakut\u014D Narrativa & IA \u2022 Arena & Rankings")))), showAdminLoginModal && /*#__PURE__*/React.createElement(AdminLoginModal, {
     db: db,
     onClose: () => setShowAdminLoginModal(false),
-    onSuccess: () => {
-      setSession({
-        role: "admin"
-      });
+    onSuccess: s => {
+      setSession(s);
       setView("admin");
       setShowAdminLoginModal(false);
     }
@@ -1003,9 +998,9 @@ function TopBar({
     className: "hidden lg:flex flex-col text-right"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-xs font-bold text-bleach-cream"
-  }, session.role === "admin" ? "Administrador" : nome || "Jogador"), /*#__PURE__*/React.createElement("span", {
+  }, session.role === "super_admin" ? "ADM Máximo" : session.role === "sub_admin" ? session.nome : nome || "Jogador"), /*#__PURE__*/React.createElement("span", {
     className: "text-[10px] text-bleach-orange"
-  }, session.role === "admin" ? "Acesso Livre ADM" : "Conectado")), /*#__PURE__*/React.createElement("button", {
+  }, session.role === "super_admin" ? "Comandante Supremo" : session.role === "sub_admin" ? "Administrador" : "Conectado")), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
     className: "px-2.5 py-1 bg-bleach-panel border border-bleach-border text-bleach-creamDim hover:text-red-400 rounded-md text-xs font-medium transition"
   }, "Sair")) : /*#__PURE__*/React.createElement("button", {
@@ -1076,31 +1071,57 @@ function Badge({
   }, children);
 }
 
-// PLAYER LOGIN SCREEN
+// PLAYER LOGIN SCREEN (FIXED & HIGHLY FORGIVING)
 function LoginScreen({
   db,
   onLogin,
   onOpenAdminModal
 }) {
-  const [whats, setWhats] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [codigo, setCodigo] = useState("");
   const [erro, setErro] = useState("");
+  const [showAjuda, setShowAjuda] = useState(false);
   function entrarJogador(e) {
     e.preventDefault();
-    const w = whats.replace(/\D/g, "");
-    if (!w || !codigo.trim()) {
-      setErro("Por favor, preencha o WhatsApp e o Código de Acesso.");
+    const termo = identificador.trim().toLowerCase();
+    const cod = codigo.trim().toLowerCase();
+    if (!termo || !cod) {
+      setErro("Por favor, preencha o WhatsApp (ou Nome do Personagem) e o Código de Acesso.");
       return;
     }
-    const p = db.personagens.find(c => c.whatsapp.replace(/\D/g, "") === w && c.codigo.trim().toLowerCase() === codigo.trim().toLowerCase());
+    const digitsOnly = termo.replace(/\D/g, "");
+    const p = (db.personagens || []).find(c => {
+      const cCode = (c.codigo || "").trim().toLowerCase();
+      if (cCode !== cod) return false;
+      const cPhone = (c.whatsapp || "").replace(/\D/g, "");
+      const cName = (c.nome || "").toLowerCase();
+
+      // Check phone match
+      if (digitsOnly.length >= 4) {
+        if (cPhone === digitsOnly || cPhone.endsWith(digitsOnly) || digitsOnly.endsWith(cPhone.slice(-8))) {
+          return true;
+        }
+      }
+
+      // Check name match
+      if (termo.length >= 2 && cName.includes(termo)) {
+        return true;
+      }
+      return false;
+    });
     if (!p) {
-      setErro("WhatsApp ou código de acesso incorretos. Confira com a administração.");
+      setErro("Personagem não encontrado com esse número/nome e código de acesso. Verifique se o código está correto (Ex: REN-8921 ou RUK-3312) ou abra a lista de ajuda abaixo.");
       return;
     }
     onLogin({
       role: "jogador",
       charId: p.id
     });
+  }
+  function preencherExemplo(char) {
+    setIdentificador(char.whatsapp);
+    setCodigo(char.codigo);
+    setErro("");
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-md mx-auto py-6"
@@ -1112,52 +1133,90 @@ function LoginScreen({
     className: "font-title text-4xl tracking-widest text-bleach-orange reiatsu-text-glow"
   }, "FICHA DO JOGADOR"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-bleach-creamDim mt-1"
-  }, "Insira o seu n\xFAmero e c\xF3digo para acessar seus atributos e rankings"), /*#__PURE__*/React.createElement(ChainDivider, null)), /*#__PURE__*/React.createElement("form", {
+  }, "Insira o seu WhatsApp (ou Nome) e seu C\xF3digo de Acesso para entrar na sua ficha"), /*#__PURE__*/React.createElement(ChainDivider, null)), /*#__PURE__*/React.createElement("form", {
     onSubmit: entrarJogador,
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-xs font-semibold text-bleach-creamDim uppercase tracking-wider mb-1.5"
-  }, "N\xFAmero de WhatsApp"), /*#__PURE__*/React.createElement("input", {
+  }, "WhatsApp ou Nome do Personagem"), /*#__PURE__*/React.createElement("input", {
     type: "text",
-    placeholder: "(11) 99999-8888",
-    value: whats,
-    onChange: e => setWhats(e.target.value),
+    placeholder: "Ex: 11999998888 ou Kurosaki Ren",
+    value: identificador,
+    onChange: e => setIdentificador(e.target.value),
     className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-4 py-3 text-white placeholder-bleach-muted text-sm focus:outline-none focus:border-bleach-orange focus:ring-1 focus:ring-bleach-orange transition"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-xs font-semibold text-bleach-creamDim uppercase tracking-wider mb-1.5"
   }, "C\xF3digo de Acesso (Senha do Player)"), /*#__PURE__*/React.createElement("input", {
     type: "password",
-    placeholder: "Ex: REN-8921",
+    placeholder: "Ex: REN-8921 ou RUK-3312",
     value: codigo,
     onChange: e => setCodigo(e.target.value),
     className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-4 py-3 text-white placeholder-bleach-muted text-sm focus:outline-none focus:border-bleach-orange focus:ring-1 focus:ring-bleach-orange transition font-mono"
   })), erro && /*#__PURE__*/React.createElement("div", {
-    className: "p-3 bg-red-950/60 border border-red-500/40 rounded-lg text-red-300 text-xs font-medium"
+    className: "p-3 bg-red-950/80 border border-red-500/50 rounded-lg text-red-200 text-xs font-medium leading-relaxed"
   }, "\u26A0\uFE0F ", erro), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     className: "w-full py-3.5 bg-gradient-to-r from-bleach-orange to-bleach-orangeDeep text-black font-extrabold text-sm uppercase tracking-widest rounded-lg shadow-lg hover:brightness-110 active:scale-[0.99] transition"
   }, "Entrar na Ficha")), /*#__PURE__*/React.createElement("div", {
-    className: "mt-6 pt-5 border-t border-bleach-borderSoft flex flex-col gap-2 text-center text-xs text-bleach-muted"
+    className: "mt-4 pt-4 border-t border-bleach-borderSoft text-center"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowAjuda(!showAjuda),
+    className: "text-xs text-bleach-orange hover:underline font-semibold"
+  }, showAjuda ? "▲ Ocultar Fichas de Exemplo" : "💡 Ver Fichas Ativas Cadastradas"), showAjuda && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 space-y-2 text-left bg-black/60 p-3 rounded-xl border border-bleach-borderSoft text-xs"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-[11px] text-bleach-muted uppercase font-bold mb-1"
+  }, "Clique para preencher:"), (db.personagens || []).map(p => /*#__PURE__*/React.createElement("div", {
+    key: p.id,
+    onClick: () => preencherExemplo(p),
+    className: "p-2 bg-bleach-panel2 border border-bleach-border hover:border-bleach-orange rounded-lg cursor-pointer flex justify-between items-center transition"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-bold text-bleach-cream"
+  }, p.nome), /*#__PURE__*/React.createElement("span", {
+    className: "font-mono text-[11px] text-bleach-orange"
+  }, p.codigo))))), /*#__PURE__*/React.createElement("div", {
+    className: "mt-4 pt-3 border-t border-bleach-borderSoft flex flex-col gap-2 text-center text-xs text-bleach-muted"
   }, /*#__PURE__*/React.createElement("p", null, "N\xE3o possui um c\xF3digo? Solicite com a administra\xE7\xE3o no WhatsApp do RPG."), /*#__PURE__*/React.createElement("button", {
     onClick: onOpenAdminModal,
     className: "text-bleach-orange hover:underline font-semibold mt-1"
   }, "\uD83D\uDD10 Sou Administrador (Entrar no Painel ADM)"))));
 }
 
-// ADMIN LOGIN SCREEN
+// ADMIN LOGIN SCREEN & MODAL (SUPPORTING MAX ADM & SUB ADMS)
 function AdminLoginScreen({
   db,
   onLoginAdmin
 }) {
-  const [senha, setSenha] = useState("");
+  const [tipoLogin, setTipoLogin] = useState("maximo"); // "maximo" ou "sub"
+  const [senhaMax, setSenhaMax] = useState("");
+  const [subUser, setSubUser] = useState("");
+  const [subPass, setSubPass] = useState("");
   const [erro, setErro] = useState("");
-  function entrarAdmin(e) {
+  function entrar(e) {
     e.preventDefault();
-    if (senha !== db.adminSenha) {
-      setErro("Senha de administrador incorreta.");
-      return;
+    if (tipoLogin === "maximo") {
+      if (senhaMax !== (db.superAdminSenha || "maximo2026")) {
+        setErro("Senha de ADM Máximo incorreta.");
+        return;
+      }
+      onLoginAdmin({
+        role: "super_admin",
+        nome: "ADM Máximo"
+      });
+    } else {
+      const sub = (db.subAdms || []).find(a => a.usuario.toLowerCase() === subUser.trim().toLowerCase() && a.senha === subPass.trim());
+      if (!sub) {
+        setErro("Usuário ou senha de Sub-ADM incorretos.");
+        return;
+      }
+      onLoginAdmin({
+        role: "sub_admin",
+        admId: sub.id,
+        nome: sub.nome,
+        cargo: sub.cargo,
+        charId: sub.charId
+      });
     }
-    onLoginAdmin();
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-md mx-auto py-6"
@@ -1171,40 +1230,93 @@ function AdminLoginScreen({
     className: "font-title text-3xl tracking-widest text-bleach-orange mt-2"
   }, "PAINEL ADMINISTRATIVO"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-bleach-creamDim mt-1"
-  }, "Acesso exclusivo para mestres e administradores"), /*#__PURE__*/React.createElement(ChainDivider, null)), /*#__PURE__*/React.createElement("form", {
-    onSubmit: entrarAdmin,
+  }, "Selecione seu n\xEDvel de acesso administrativo"), /*#__PURE__*/React.createElement(ChainDivider, null)), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mb-4"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setTipoLogin("maximo");
+      setErro("");
+    },
+    className: `flex-1 py-2 rounded-lg text-xs font-bold uppercase transition ${tipoLogin === "maximo" ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500 shadow" : "bg-bleach-panel2 border border-bleach-border text-bleach-creamDim"}`
+  }, "\uD83D\uDC51 ADM M\xE1ximo"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setTipoLogin("sub");
+      setErro("");
+    },
+    className: `flex-1 py-2 rounded-lg text-xs font-bold uppercase transition ${tipoLogin === "sub" ? "bg-bleach-orange/20 text-bleach-orange border border-bleach-orange shadow" : "bg-bleach-panel2 border border-bleach-border text-bleach-creamDim"}`
+  }, "\uD83D\uDEE1\uFE0F Sub-ADM")), /*#__PURE__*/React.createElement("form", {
+    onSubmit: entrar,
     className: "space-y-4"
+  }, tipoLogin === "maximo" ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs font-semibold text-bleach-creamDim uppercase tracking-wider mb-1.5"
+  }, "Senha Mestra do ADM M\xE1ximo"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    placeholder: "Senha mestra (Padr\xE3o: maximo2026)",
+    value: senhaMax,
+    onChange: e => setSenhaMax(e.target.value),
+    className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-4 py-3 text-white placeholder-bleach-muted text-sm focus:outline-none focus:border-bleach-orange focus:ring-1 focus:ring-bleach-orange transition font-mono"
+  })) : /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-xs font-semibold text-bleach-creamDim uppercase tracking-wider mb-1.5"
-  }, "Senha do Administrador"), /*#__PURE__*/React.createElement("input", {
+  }, "Usu\xE1rio do Sub-ADM"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "Ex: kisuke",
+    value: subUser,
+    onChange: e => setSubUser(e.target.value),
+    className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-bleach-orange"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-xs font-semibold text-bleach-creamDim uppercase tracking-wider mb-1.5"
+  }, "Senha Individual"), /*#__PURE__*/React.createElement("input", {
     type: "password",
     placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
-    value: senha,
-    onChange: e => setSenha(e.target.value),
-    className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-4 py-3 text-white placeholder-bleach-muted text-sm focus:outline-none focus:border-bleach-orange focus:ring-1 focus:ring-bleach-orange transition"
-  })), erro && /*#__PURE__*/React.createElement("div", {
+    value: subPass,
+    onChange: e => setSubPass(e.target.value),
+    className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-bleach-orange"
+  }))), erro && /*#__PURE__*/React.createElement("div", {
     className: "p-3 bg-red-950/60 border border-red-500/40 rounded-lg text-red-300 text-xs font-medium"
   }, "\u26A0\uFE0F ", erro), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     className: "w-full py-3.5 bg-gradient-to-r from-bleach-orange to-bleach-orangeDeep text-black font-extrabold text-sm uppercase tracking-widest rounded-lg shadow-lg hover:brightness-110 transition"
-  }, "Acessar Painel ADM"))));
+  }, tipoLogin === "maximo" ? "Acessar como ADM Máximo" : "Acessar como Sub-ADM"))));
 }
-
-// ADMIN LOGIN MODAL
 function AdminLoginModal({
   db,
   onClose,
   onSuccess
 }) {
-  const [senha, setSenha] = useState("");
+  const [tipoLogin, setTipoLogin] = useState("maximo");
+  const [senhaMax, setSenhaMax] = useState("");
+  const [subUser, setSubUser] = useState("");
+  const [subPass, setSubPass] = useState("");
   const [erro, setErro] = useState("");
   function submit(e) {
     e.preventDefault();
-    if (senha !== db.adminSenha) {
-      setErro("Senha incorreta.");
-      return;
+    if (tipoLogin === "maximo") {
+      if (senhaMax !== (db.superAdminSenha || "maximo2026")) {
+        setErro("Senha incorreta.");
+        return;
+      }
+      onSuccess({
+        role: "super_admin",
+        nome: "ADM Máximo"
+      });
+    } else {
+      const sub = (db.subAdms || []).find(a => a.usuario.toLowerCase() === subUser.trim().toLowerCase() && a.senha === subPass.trim());
+      if (!sub) {
+        setErro("Credenciais de Sub-ADM inválidas.");
+        return;
+      }
+      onSuccess({
+        role: "sub_admin",
+        admId: sub.id,
+        nome: sub.nome,
+        cargo: sub.cargo,
+        charId: sub.charId
+      });
     }
-    onSuccess();
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -1215,26 +1327,54 @@ function AdminLoginModal({
     className: "absolute top-4 right-4 text-bleach-muted hover:text-white text-lg font-bold"
   }, "\u2715"), /*#__PURE__*/React.createElement("h3", {
     className: "font-title text-2xl text-bleach-orange tracking-wider mb-2"
-  }, "LOGIN ADM"), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs text-bleach-creamDim mb-4"
-  }, "Informe a senha da administra\xE7\xE3o."), /*#__PURE__*/React.createElement("form", {
+  }, "LOGIN ADMINISTRATIVO"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 mb-3"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setTipoLogin("maximo");
+      setErro("");
+    },
+    className: `flex-1 py-1.5 rounded text-xs font-bold uppercase transition ${tipoLogin === "maximo" ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500" : "bg-black text-bleach-muted"}`
+  }, "\uD83D\uDC51 ADM M\xE1ximo"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setTipoLogin("sub");
+      setErro("");
+    },
+    className: `flex-1 py-1.5 rounded text-xs font-bold uppercase transition ${tipoLogin === "sub" ? "bg-bleach-orange/20 text-bleach-orange border border-bleach-orange" : "bg-black text-bleach-muted"}`
+  }, "\uD83D\uDEE1\uFE0F Sub-ADM")), /*#__PURE__*/React.createElement("form", {
     onSubmit: submit,
-    className: "space-y-4"
-  }, /*#__PURE__*/React.createElement("input", {
+    className: "space-y-3"
+  }, tipoLogin === "maximo" ? /*#__PURE__*/React.createElement("input", {
     type: "password",
-    placeholder: "Senha de Administrador",
-    value: senha,
-    onChange: e => setSenha(e.target.value),
+    placeholder: "Senha do ADM M\xE1ximo",
+    value: senhaMax,
+    onChange: e => setSenhaMax(e.target.value),
     className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-bleach-orange"
-  }), erro && /*#__PURE__*/React.createElement("div", {
+  }) : /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "Usu\xE1rio do Sub-ADM",
+    value: subUser,
+    onChange: e => setSubUser(e.target.value),
+    className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-bleach-orange"
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    placeholder: "Senha Individual",
+    value: subPass,
+    onChange: e => setSubPass(e.target.value),
+    className: "w-full bg-bleach-panel2 border border-bleach-border rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-bleach-orange"
+  })), erro && /*#__PURE__*/React.createElement("div", {
     className: "text-red-400 text-xs"
   }, erro), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     className: "w-full py-2.5 bg-bleach-orange text-black font-bold uppercase text-xs rounded-lg shadow hover:bg-orange-400"
-  }, "Entrar"))));
+  }, "Entrar no Painel"))));
 }
 
-// TAB: RANKINGS VIEW (PUBLIC)
+// TAB: RANKINGS VIEW
 function RankingsView({
   rankFisico,
   rankPressao,
@@ -1348,16 +1488,13 @@ function RankingsView({
   }))));
 }
 
-// TAB: KIDŌS CATALOG & FLUID REIATSU VISUALIZER
+// TAB: KIDŌS CATALOG & ZANPAKUTŌ SWORD VISUALIZER (NEW SWORD DESIGN!)
 function KidosView({
   personagem
 }) {
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todos");
   const [busca, setBusca] = useState("");
-
-  // Reiatsu pool simulation
   const pressaoBase = personagem?.atributos?.pressao || 30;
-  // Formula: Cap of Reiatsu and Max Spells per Scene
   const maxKidosCena = Math.max(3, Math.floor(pressaoBase / 7) + 1);
   const [kidosUsados, setKidosUsados] = useState(0);
   const [relatoCena, setRelatoCena] = useState("");
@@ -1399,38 +1536,59 @@ function KidosView({
     className: "font-title text-4xl sm:text-5xl tracking-widest text-bleach-orange mt-3 reiatsu-text-glow"
   }, "KID\u014CS DA SOCIEDADE DAS ALMAS"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs sm:text-sm text-bleach-creamDim mt-2 leading-relaxed"
-  }, "Explore o comp\xEAndio oficial de ", /*#__PURE__*/React.createElement("strong", null, "Had\u014D"), " (Destrui\xE7\xE3o), ", /*#__PURE__*/React.createElement("strong", null, "Bakud\u014D"), " (Aprisionamento) e ", /*#__PURE__*/React.createElement("strong", null, "Kaid\u014D"), " (Cura). Abaixo voc\xEA tamb\xE9m encontra o ", /*#__PURE__*/React.createElement("strong", null, "Visualizador de Reiatsu L\xEDquido"), " para gerenciar seus feiti\xE7os em cena!"))), /*#__PURE__*/React.createElement(Section, {
-    title: "\uD83D\uDCA7 Visualizador Din\xE2mico de Reiatsu & Limite de Kid\u014D",
-    subtitle: "Representa\xE7\xE3o visual do seu reservat\xF3rio espiritual descendo como l\xEDquido conforme voc\xEA conjura em combate"
+  }, "Explore o comp\xEAndio oficial de ", /*#__PURE__*/React.createElement("strong", null, "Had\u014D"), " (Destrui\xE7\xE3o), ", /*#__PURE__*/React.createElement("strong", null, "Bakud\u014D"), " (Aprisionamento) e ", /*#__PURE__*/React.createElement("strong", null, "Kaid\u014D"), " (Cura). Abaixo voc\xEA tamb\xE9m encontra a ", /*#__PURE__*/React.createElement("strong", null, "L\xE2mina Espiritual da Zanpakut\u014D"), " para gerenciar seus feiti\xE7os em cena!"))), /*#__PURE__*/React.createElement(Section, {
+    title: "\u2694\uFE0F L\xE2mina Espiritual da Zanpakut\u014D & Limite de Kid\u014D",
+    subtitle: "A energia espiritual que percorre o fio da sua l\xE2mina conforme voc\xEA conjura feiti\xE7os em combate"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 lg:grid-cols-3 gap-6 items-center"
   }, /*#__PURE__*/React.createElement("div", {
     className: "bg-black/60 border border-bleach-border rounded-2xl p-5 flex flex-col items-center justify-center relative overflow-hidden shadow-inner"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-xs uppercase font-bold tracking-widest text-bleach-creamDim mb-2"
-  }, "Reservat\xF3rio de Reiatsu"), /*#__PURE__*/React.createElement("div", {
-    className: "w-32 h-64 border-4 border-bleach-blue/50 rounded-2xl bg-black/80 relative overflow-hidden flex flex-col justify-end p-1 blue-reiatsu-glow"
+    className: "text-xs uppercase font-bold tracking-widest text-bleach-orange mb-3 flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDDE1\uFE0F"), " L\xE2mina da Zanpakut\u014D"), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-col items-center"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "absolute inset-0 flex flex-col justify-between p-2 pointer-events-none z-20 opacity-30 text-[9px] font-mono text-white"
-  }, /*#__PURE__*/React.createElement("span", null, "100% \u2014 Max"), /*#__PURE__*/React.createElement("span", null, "75% \u2014 Est\xE1vel"), /*#__PURE__*/React.createElement("span", null, "50% \u2014 Metade"), /*#__PURE__*/React.createElement("span", null, "25% \u2014 Cr\xEDtico"), /*#__PURE__*/React.createElement("span", null, "0% \u2014 Esgotado")), /*#__PURE__*/React.createElement("div", {
-    className: "w-full rounded-xl transition-all duration-700 relative overflow-hidden flex items-center justify-center",
+    className: "w-8 h-14 bg-gradient-to-b from-[#111] via-[#222] to-[#111] border-2 border-[#C94E0A] rounded-t-lg relative flex flex-col items-center justify-center shadow-lg"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "w-full h-1 bg-amber-500/80 my-0.5"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "w-full h-1 bg-amber-500/80 my-0.5"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "w-full h-1 bg-amber-500/80 my-0.5"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] font-black text-amber-400 font-cinzel"
+  }, "\u534D")), /*#__PURE__*/React.createElement("div", {
+    className: "w-20 h-4 bg-gradient-to-r from-[#C94E0A] via-[#FF6A13] to-[#C94E0A] rounded-full border border-black shadow-[0_0_12px_#FF6A13] z-20 -my-0.5 flex items-center justify-center"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "w-16 h-1 bg-black/60 rounded-full"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "w-12 h-64 border-x-2 border-b-2 border-bleach-blue/70 bg-black/90 relative overflow-hidden flex flex-col justify-end shadow-[0_0_20px_rgba(79,179,232,0.3)]",
     style: {
-      height: `${pctRestante}%`,
-      background: pctRestante > 50 ? 'linear-gradient(180deg, #4FB3E8 0%, #1E4C63 100%)' : pctRestante > 20 ? 'linear-gradient(180deg, #FF6A13 0%, #C94E0A 100%)' : 'linear-gradient(180deg, #D6483F 0%, #681A15 100%)',
-      boxShadow: '0 0 20px rgba(79, 179, 232, 0.6)'
+      clipPath: 'polygon(0% 0%, 100% 0%, 100% 88%, 50% 100%, 0% 88%)'
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-white font-title text-3xl font-extrabold drop-shadow z-10"
-  }, pctRestante, "%"))), /*#__PURE__*/React.createElement("div", {
+    className: "absolute inset-y-0 left-1/2 w-0.5 bg-white/20 -translate-x-1/2 pointer-events-none z-20"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "absolute inset-0 flex flex-col justify-between py-3 px-1 pointer-events-none z-20 text-[8px] font-mono text-white/50 text-center"
+  }, /*#__PURE__*/React.createElement("span", null, "100% \u534D"), /*#__PURE__*/React.createElement("span", null, "75%"), /*#__PURE__*/React.createElement("span", null, "50%"), /*#__PURE__*/React.createElement("span", null, "25%"), /*#__PURE__*/React.createElement("span", null, "0%")), /*#__PURE__*/React.createElement("div", {
+    className: "w-full transition-all duration-700 relative overflow-hidden flex items-center justify-center",
+    style: {
+      height: `${pctRestante}%`,
+      background: pctRestante > 50 ? 'linear-gradient(180deg, #4FB3E8 0%, #1E4C63 80%, #0A2233 100%)' : pctRestante > 20 ? 'linear-gradient(180deg, #FF6A13 0%, #C94E0A 80%, #4A1A02 100%)' : 'linear-gradient(180deg, #D6483F 0%, #7A1711 80%, #300502 100%)',
+      boxShadow: '0 0 25px rgba(79, 179, 232, 0.8)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-white font-title text-2xl font-black drop-shadow z-10"
+  }, pctRestante, "%")))), /*#__PURE__*/React.createElement("div", {
     className: "mt-4 text-center"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-bleach-muted"
-  }, "Kid\u014Ds Restantes na Cena:"), /*#__PURE__*/React.createElement("div", {
+  }, "Kid\u014Ds Restantes na L\xE2mina:"), /*#__PURE__*/React.createElement("div", {
     className: "text-2xl font-mono font-bold text-bleach-orange mt-0.5"
   }, restantes, " / ", maxKidosCena), /*#__PURE__*/React.createElement("button", {
     onClick: resetarReiatsu,
     className: "mt-3 px-4 py-1.5 bg-bleach-panel border border-bleach-border text-xs text-bleach-cream rounded-lg hover:border-bleach-orange transition"
-  }, "\uD83D\uDD04 Restaurar Reiatsu (Nova Cena)"))), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDD04 Restaurar Reiatsu da L\xE2mina"))), /*#__PURE__*/React.createElement("div", {
     className: "lg:col-span-2 space-y-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "bg-bleach-panel2 border border-bleach-border rounded-xl p-4"
@@ -1442,7 +1600,7 @@ function KidosView({
     rows: 4,
     value: relatoCena,
     onChange: e => setRelatoCena(e.target.value),
-    placeholder: "Ex: Concentrei minha Reiatsu na ponta do dedo indicador disparando Had\u014D #4 Byakurai em linha reta...",
+    placeholder: "Ex: Concentrei minha Reiatsu ao longo do fio da Zanpakut\u014D liberando Had\u014D #4 Byakurai em linha reta...",
     className: "w-full bg-black/60 border border-bleach-border rounded-lg p-3 text-xs text-white placeholder-bleach-muted focus:outline-none focus:border-bleach-orange"
   }), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mt-2"
@@ -1525,6 +1683,7 @@ function ArenaView({
   const p2 = db.personagens.find(p => p.id === combateAtivo?.p2Id);
   const [juizTexto, setJuizTexto] = useState(combateAtivo?.juizLog || "");
   const [turnoAtual, setTurnoAtual] = useState(combateAtivo?.turno || "Turno 1");
+  const isAdm = session?.role === "super_admin" || session?.role === "sub_admin";
   function criarDuelo() {
     if (!desafianteId || !desafiadoId || desafianteId === desafiadoId) {
       alert("Selecione dois lutadores diferentes para o duelo!");
@@ -1602,7 +1761,7 @@ function ArenaView({
     className: "flex justify-between items-center"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-title text-2xl tracking-wider uppercase text-bleach-cream"
-  }, "Duelo em Destaque"), session?.role === "admin" && /*#__PURE__*/React.createElement("button", {
+  }, "Duelo em Destaque"), isAdm && /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowNovoDuelo(!showNovoDuelo),
     className: "px-4 py-2 bg-bleach-orange text-black font-extrabold text-xs uppercase rounded-lg shadow hover:bg-orange-400"
   }, "+ Criar Novo Duelo")), showNovoDuelo && /*#__PURE__*/React.createElement("div", {
@@ -1708,7 +1867,7 @@ function ArenaView({
     className: "text-xs font-bold uppercase tracking-wider text-bleach-orange mb-2"
   }, "\uD83D\uDCDC Relat\xF3rio do Juiz & Estado da Batalha (Atualizado pela ADM)"), /*#__PURE__*/React.createElement("div", {
     className: "p-4 bg-black/60 border border-bleach-borderSoft rounded-xl text-xs text-bleach-creamDim leading-relaxed"
-  }, combateAtivo.juizLog)), session?.role === "admin" && /*#__PURE__*/React.createElement("div", {
+  }, combateAtivo.juizLog)), isAdm && /*#__PURE__*/React.createElement("div", {
     className: "mt-6 pt-5 border-t border-bleach-orange/40 space-y-4"
   }, /*#__PURE__*/React.createElement("h4", {
     className: "text-xs font-bold uppercase tracking-wider text-bleach-orange"
@@ -1760,7 +1919,7 @@ function ArenaView({
   }, "Nenhum combate ativo no momento. Solicite \xE0 administra\xE7\xE3o o in\xEDcio de um duelo!"));
 }
 
-// TAB: FICHA DO JOGADOR (EXPANDED WITH BLEACH MOLD, RANKING BARS, GACHA BUTTONS, WHATSAPP GENERATOR, AND AI ZANPAKUTO)
+// TAB: FICHA DO JOGADOR
 function FichaView({
   db,
   saveDb,
@@ -1985,13 +2144,6 @@ function FichaView({
     };
     reader.readAsDataURL(file);
   }
-  function salvarFotoUrl() {
-    if (!editFoto.trim()) return;
-    updateChar({
-      foto: editFoto.trim()
-    }, "Foto de perfil atualizada");
-    alert("Foto atualizada com sucesso!");
-  }
   function salvarDadosCompletos() {
     updateChar({
       nome: editNome.trim() || personagem.nome,
@@ -2032,72 +2184,72 @@ function FichaView({
     alert(`Parabéns! Sua ${aiZkTipo.toUpperCase()} foi registrada na sua ficha com sucesso!`);
   }
 
-  // Generate WhatsApp Sheet
+  // Generate WhatsApp Sheet (Backticks escaped properly)
   function gerarFichaWhatsApp() {
     const totalKidos = (personagem.kidosConhecidos || []).length || (personagem.tecnicas || []).filter(t => ["Hadō", "Bakudō", "Kaidō"].includes(t.categoria)).length || 3;
     return `࣭    ㅤ
-                    ⚯͛
-                         ᩠      ⊹                ᩠          . 
-                             ࣪       ✶  ͏t𝖍e
-                  ﹙  𝐒𝐎𝐂𝐈𝐄𝐃𝐀𝐃𝐄 𝐃𝐀𝐒 𝐀𝐋𝐌𝐀𝐒  ﹚⊹
-                 ɑ proteçɑ̃o 𝘀𝗲𝗺𝗽𝗿𝗲 seɾɑ́ 𝑑͟𝑎͟𝑑͟𝑎 
-             no       𝗦𝗘𝗜𝗥𝗘𝗜𝗧𝗘𝗜    ɑqueles 
-                  .  que   ɑ     𝒎𝒆𝒓𝒆𝒄𝒆𝒎  .ᐟ
-                          ︶ ͝     ︶꒷꒦︶                        
-         
-                  ⊹    /   𝙫ocê é um shinigɑmi
-                toɾne-se   𝓛𝐞𝐧𝐝𝐚́𝐫𝐢𝐨  ・・・
-                                         ﹀                                   
-            ͛  𝒇𝒊𝒄𝒉𝒂 𝒅𝒆   :   𝕻𝗘𝗥𝗦𝗢𝗡𝗔𝗚𝗘𝗠  „                        
-      ɑpɾesentɑmos ɑ fichɑ que dɑɾɑ́ vidɑ 
-      ɑo seu shinigɑmi(ɑ)! ⊹ ɑdiɑntɑmos ɑ 
-      impoɾtɑnciɑ de fɑzeɾ ɑ fichɑ com 
-      cɑlmɑ, ɑliɑdɑ ɑ leituɾɑ minunciosɑ 
-      dos documentos disponibilizɑdos. 
-                                                                       
-            ﹙ 𝗗𝗔𝗗𝗢𝗦 𝗗𝗢 𝗣𝗔𝗥𝗧𝗜𝗖𝗜𝗣𝗔𝗡𝗧𝗘 ﹚ 
-           ✶  „  nome &\` quɑtɾo digit͟os .ᐟ
-           ⎯  ${personagem.nome.split(" ")[0] || "Jogador"}, ${personagem.whatsapp ? personagem.whatsapp.slice(-4) : "0000"}
-           ✶  „  dɑ͟tɑ de nɑscimento &\` idɑde .ᐟ
-           ⎯  ${personagem.aniversarioPlayer || "15/07"} • ${personagem.idadePlayer || "20"} anos
-           ✶  „  ɑçɑ̃o de suɑ ɑu͟t͟oɾiɑ .ᐟ
-           ⎯ fɑvoɾ enviɑɾ sepɑɾɑdɑmente no privado.
+                ⚯͛
+                     ᩠      ⊹                ᩠          . 
+                         ࣪       ✶  ͏t𝖍e
+              ﹙  𝐒𝐎𝐂𝐈𝐄𝐃𝐀𝐃𝐄 𝐃𝐀𝐒 𝐀𝐋𝐌𝐀𝐒  ﹚⊹
+             ɑ proteçɑ̃o 𝘀𝗲𝗺𝗽𝗿𝗲 seɾɑ́ 𝑑͟𝑎͟𝑑͟𝑎 
+         no       𝗦𝗘𝗜𝗥𝗘𝗜𝗧𝗘𝗜    ɑqueles 
+              .  que   ɑ     𝒎𝒆𝒓𝒆𝒄𝒆𝒎  .ᐟ
+                      ︶ ͝     ︶꒷꒦︶                        
+     
+              ⊹    /   𝙫ocê é um shinigɑmi
+            toɾne-se   𝓛𝐞𝐧𝐝𝐚́𝐫𝐢𝐨  ・・・
+                                     ﹀                                   
+        ͛  𝒇𝒊𝒄𝒉𝒂 𝒅𝒆   :   𝕻𝗘𝗥𝗦𝗢𝗡𝗔𝗚𝗘𝗠  „                        
+  ɑpɾesentɑmos ɑ fichɑ que dɑɾɑ́ vidɑ 
+  ɑo seu shinigɑmi(ɑ)! ⊹ ɑdiɑntɑmos ɑ 
+  impoɾtɑnciɑ de fɑzeɾ ɑ fichɑ com 
+  cɑlmɑ, ɑliɑdɑ ɑ leituɾɑ minunciosɑ 
+  dos documentos disponibilizɑdos. 
+                                                                   
+        ﹙ 𝗗𝗔𝗗𝗢𝗦 𝗗𝗢 𝗣𝗔𝗥𝗧𝗜𝗖𝗜𝗣𝗔𝗡𝗧𝗘 ﹚ 
+       ✶  „  nome &\` quɑtɾo digit͟os .ᐟ
+       ⎯  ${personagem.nome.split(" ")[0] || "Jogador"}, ${personagem.whatsapp ? personagem.whatsapp.slice(-4) : "0000"}
+       ✶  „  dɑ͟tɑ de nɑscimento &\` idɑde .ᐟ
+       ⎯  ${personagem.aniversarioPlayer || "15/07"} • ${personagem.idadePlayer || "20"} anos
+       ✶  „  ɑçɑ̃o de suɑ ɑu͟t͟oɾiɑ .ᐟ
+       ⎯ fɑvoɾ enviɑɾ sepɑɾɑdɑmente no privado.
 
-            ﹙ 𝗗𝗔𝗗𝗢𝗦 𝗗𝗢 𝗣𝗘𝗥𝗦𝗢𝗡𝗔𝗚𝗘𝗠 ﹚ 
-           ✶  „  no͟me do peɾsonɑgem  .ᐟ
-           ⎯     ${personagem.nome}
-           ✶  „  idɑde &\` ɑn͟ive͟ɾsɑ́ɾio .ᐟ
-           ⎯ ${personagem.idadeChar || "18"} anos - ${personagem.aniversarioChar || "15/07"}. 
-           ✶  „  ɾeivindicɑçɑ̃o fɑ͟ciɑl  .ᐟ
-           ⎯  ${personagem.faceclaim || personagem.nome}
-           ✶  „  esquɑdɾɑ̃o de suɑ escolhɑ  .ᐟ
-           ⎯   ${personagem.esquadrao || "11º Esquadrão"} 
-           ✶  „  oɾigem e rɑçɑ .ᐟ
-           ⎯  ${personagem.raca || "Shinigami"}
-           ✶  „  zɑnpɑkutō .ᐟ
-           ⎯ nome: ${personagem.zanpakuto?.nome || "Em despertar"}
-           ⎯ stɑtus: ${personagem.zanpakuto?.bankai ? "Bankai Desperta" : personagem.zanpakuto?.shikai ? "Shikai Desperta" : "Lâmina Selada"}
-           ✶  „  quɑntidɑde de kidōs .ᐟ
-           ⎯   ${totalKidos}
+        ﹙ 𝗗𝗔𝗗𝗢𝗦 𝗗𝗢 𝗣𝗘𝗥𝗦𝗢𝗡𝗔𝗚𝗘𝗠 ﹚ 
+       ✶  „  no͟me do peɾsonɑgem  .ᐟ
+       ⎯     ${personagem.nome}
+       ✶  „  idɑde &\` ɑn͟ive͟ɾsɑ́ɾio .ᐟ
+       ⎯ ${personagem.idadeChar || "18"} anos - ${personagem.aniversarioChar || "15/07"}. 
+       ✶  „  ɾeivindicɑçɑ̃o fɑ͟ciɑl  .ᐟ
+       ⎯  ${personagem.faceclaim || personagem.nome}
+       ✶  „  esquɑdɾɑ̃o de suɑ escolhɑ  .ᐟ
+       ⎯   ${personagem.esquadrao || "11º Esquadrão"} 
+       ✶  „  oɾigem e rɑçɑ .ᐟ
+       ⎯  ${personagem.raca || "Shinigami"}
+       ✶  „  zɑnpɑkutō .ᐟ
+       ⎯ nome: ${personagem.zanpakuto?.nome || "Em despertar"}
+       ⎯ stɑtus: ${personagem.zanpakuto?.bankai ? "Bankai Desperta" : personagem.zanpakuto?.shikai ? "Shikai Desperta" : "Lâmina Selada"}
+       ✶  „  quɑntidɑde de kidōs .ᐟ
+       ⎯   ${totalKidos}
 
-            ﹙ 𝗔𝗧𝗥𝗜𝗕𝗨𝗧𝗢𝗦 𝗚𝗘𝗥𝗔𝗜𝗦 ﹚              
-           ✶  „ distɾibuiçɑ̃o ɑtuɑl .ᐟ
-           ⎯  pɾessɑ̃o espiɾituɑl: ${personagem.atributos.pressao}
-           ⎯  foɾçɑ:  ${personagem.atributos.forca}           
-           ⎯  velocidɑde: ${personagem.atributos.velocidade}
-           ⎯  ɾesiliênciɑ: ${personagem.atributos.resiliencia}
+        ﹙ 𝗔𝗧𝗥𝗜𝗕𝗨𝗧𝗢𝗦 𝗚𝗘𝗥𝗔𝗜𝗦 ﹚              
+       ✶  „ distɾibuiçɑ̃o ɑtuɑl .ᐟ
+       ⎯  pɾessɑ̃o espiɾituɑl: ${personagem.atributos.pressao}
+       ⎯  foɾçɑ:  ${personagem.atributos.forca}           
+       ⎯  velocidɑde: ${personagem.atributos.velocidade}
+       ⎯  ɾesiliênciɑ: ${personagem.atributos.resiliencia}
 
-            ﹙ 𝗧𝗘𝗥𝗠𝗢 𝗗𝗘 𝗖𝗢𝗡𝗦𝗘𝗡𝗧𝗜𝗠𝗘𝗡𝗧𝗢 ﹚     
-      ₍  X  ₎ estou ciente de que dentɾo do 
-      role plɑying gɑme encontɾɑɾei temɑs           
-      e cenɑs que podem seɾ gɑtilhos, e 
-      tɑmbém ɑssumo ɾesponsɑbilidɑde 
-      de ɑceitɑçɑ̃o cɑso o peɾsonɑgem 
-      sofɾɑ quɑlqueɾ dɑno nɑɾɾɑtivo.
+        ﹙ 𝗧𝗘𝗥𝗠𝗢 𝗗𝗘 𝗖𝗢𝗡𝗦𝗘𝗡𝗧𝗜𝗠𝗘𝗡𝗧𝗢 ﹚     
+  ₍  X  ₎ estou ciente de que dentɾo do 
+  role plɑying gɑme encontɾɑɾei temɑs           
+  e cenɑs que podem seɾ gɑtilhos, e 
+  tɑmbém ɑssumo ɾesponsɑbilidɑde 
+  de ɑceitɑçɑ̃o cɑso o peɾsonɑgem 
+  sofɾɑ quɑlqueɾ dɑno nɑɾɾɑtivo.
 
-                                   ✶
-                           𝐩𝐬𝐲𝐜𝐡𝐞 ın 
-                          ınspırαtıon`;
+                               ✶
+                       𝐩𝐬𝐲𝐜𝐡𝐞 ın 
+                      ınspırαtıon`;
   }
   function copiarFichaWhatsApp() {
     const texto = gerarFichaWhatsApp();
@@ -2649,13 +2801,15 @@ function FichaView({
   }, op.habilidade)))))));
 }
 
-// TAB: ADMIN CONTROL PANEL (HIERARCHY, TASKS, AI ARBITER, DICE ROLLER WITH TENSION)
+// TAB: ADMIN CONTROL PANEL (WITH MAX ADM PRIVILEGES & SUB ADMS RESTRICTIONS + DELETE CHAR BUTTON)
 function AdminPanel({
   db,
   saveDb,
+  session,
   onAbrirFicha
 }) {
-  const [abaAdmin, setAbaAdmin] = useState("fichas");
+  const isMaxAdm = session?.role === "super_admin";
+  const [abaAdmin, setAbaAdmin] = useState(isMaxAdm ? "maximo" : "fichas");
   const [busca, setBusca] = useState("");
 
   // New Character Form
@@ -2673,20 +2827,24 @@ function AdminPanel({
   });
 
   // Admin Password
-  const [novaSenha, setNovaSenha] = useState("");
-  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [novaSenhaMax, setNovaSenhaMax] = useState("");
   const [msgPass, setMsgPass] = useState("");
 
   // Max Admin - Sub Admins Management
   const [novoSubAdm, setNovoSubAdm] = useState({
+    usuario: "",
+    senha: "",
     nome: "",
     cargo: "Avaliador de Cenas & Fichas",
     charId: db.personagens[0]?.id || ""
   });
 
+  // Delete Character Confirmation Modal State
+  const [charParaDeletar, setCharParaDeletar] = useState(null);
+
   // Admin Tasks Logger
   const [tarefaSelecionada, setTarefaSelecionada] = useState("cenas");
-  const [admExecutor, setAdmExecutor] = useState(db.administradores[0]?.nome || "ADM");
+  const [admExecutor, setAdmExecutor] = useState(session?.nome || "ADM");
   const [charAlvoAdm, setCharAlvoAdm] = useState(db.personagens[0]?.id || "");
   const [fichasAvaliadasContador, setFichasAvaliadasContador] = useState(0);
 
@@ -2783,33 +2941,52 @@ function AdminPanel({
     });
     alert("Ficha criada com sucesso!");
   }
+
+  // DELETE CHARACTER (EXCLUSIVE TO MAX ADM)
+  function confirmarExclusaoChar() {
+    if (!charParaDeletar) return;
+    const novosChars = (db.personagens || []).filter(p => p.id !== charParaDeletar.id);
+    saveDb({
+      ...db,
+      personagens: novosChars
+    });
+    alert(`A ficha de ${charParaDeletar.nome} foi apagada com sucesso!`);
+    setCharParaDeletar(null);
+  }
   function adicionarSubAdm() {
-    if (!novoSubAdm.nome.trim()) return;
+    if (!novoSubAdm.usuario.trim() || !novoSubAdm.senha.trim() || !novoSubAdm.nome.trim()) {
+      alert("Preencha Usuário, Senha e Nome do Sub-ADM!");
+      return;
+    }
     const sub = {
       id: uid(),
+      usuario: novoSubAdm.usuario.trim().toLowerCase(),
+      senha: novoSubAdm.senha.trim(),
       nome: novoSubAdm.nome.trim(),
-      cargo: novoSubAdm.cargo,
-      nivel: "menor",
+      cargo: novoSubAdm.cargo.trim(),
       charId: novoSubAdm.charId
     };
     saveDb({
       ...db,
-      administradores: [...(db.administradores || []), sub]
+      subAdms: [...(db.subAdms || []), sub]
     });
     setNovoSubAdm({
+      usuario: "",
+      senha: "",
       nome: "",
       cargo: "Avaliador de Cenas & Fichas",
       charId: db.personagens[0]?.id || ""
     });
+    alert("Sub-ADM cadastrado com sucesso!");
   }
   function removerSubAdm(id) {
-    saveDb({
-      ...db,
-      administradores: db.administradores.filter(a => a.id !== id)
-    });
+    if (confirm("Deseja realmente revogar o acesso deste Administrador?")) {
+      saveDb({
+        ...db,
+        subAdms: (db.subAdms || []).filter(a => a.id !== id)
+      });
+    }
   }
-
-  // Record Admin Activity & Award Points to Admin's Character
   function registrarAtividadeAdm() {
     let pontosGanhos = 0;
     let descTarefa = "";
@@ -2838,8 +3015,6 @@ function AdminPanel({
       pontosGanhos,
       data: nowStr()
     };
-
-    // Award points to the target character
     const personagens = db.personagens.map(p => {
       if (p.id === charAlvoAdm) {
         return {
@@ -2863,8 +3038,6 @@ function AdminPanel({
     });
     alert(`Atividade registrada com sucesso! +${pontosGanhos} pontos foram depositados na ficha de destino.`);
   }
-
-  // AI Text Combat Judge Simulation
   function julgarCombateComIA() {
     if (!iaCenaTexto.trim()) {
       alert("Por favor, cole o texto narrativo da cena dos combatentes!");
@@ -2877,7 +3050,6 @@ function AdminPanel({
       const p2Obj = db.personagens.find(p => p.nome.toLowerCase().includes(iaLutador2.toLowerCase())) || db.personagens[1];
       const diffVel = (p1Obj?.atributos?.velocidade || 10) - (p2Obj?.atributos?.velocidade || 10);
       const diffPressao = (p1Obj?.atributos?.pressao || 10) - (p2Obj?.atributos?.pressao || 10);
-      const diffForca = (p1Obj?.atributos?.forca || 10) - (p2Obj?.atributos?.forca || 10);
       let conclusao = "";
       if (Math.abs(diffVel) >= 15) {
         conclusao = `${diffVel > 0 ? p1Obj.nome : p2Obj.nome} possui superioridade nítida de velocidade (+${Math.abs(diffVel)} em Hohō), esquivando da primeira investida e conseguindo ângulo crítico de contra-ataque.`;
@@ -2903,14 +3075,12 @@ function AdminPanel({
       playReiatsuSound('win');
     }, 1200);
   }
-
-  // Tension Dice Roller
   function rolarDadoComTensao() {
     setDadoRolando(true);
     setDadoResultado(null);
     playReiatsuSound('roll');
     let ticks = 0;
-    const maxTicks = 18; // longer duration for suspense
+    const maxTicks = 18;
     const interval = setInterval(() => {
       const rand = Math.floor(Math.random() * dadoTipo) + 1;
       setDadoAnimVal(rand);
@@ -2940,7 +3110,7 @@ function AdminPanel({
         }
         const registroDado = {
           id: uid(),
-          autor: "Administração",
+          autor: session?.nome || "Administração",
           personagem: dadoChar,
           dado: `d${dadoTipo}`,
           resultado: finalVal,
@@ -2961,36 +3131,30 @@ function AdminPanel({
       }
     }, 80);
   }
-  function alterarSenhaAdmin() {
-    if (!novaSenha.trim()) return;
+  function alterarSenhaSuperAdmin() {
+    if (!novaSenhaMax.trim()) return;
     saveDb({
       ...db,
-      adminSenha: novaSenha.trim()
+      superAdminSenha: novaSenhaMax.trim()
     });
-    setMsgPass("Senha alterada com sucesso!");
-    setNovaSenha("");
+    setMsgPass("Senha mestra alterada com sucesso!");
+    setNovaSenhaMax("");
     setTimeout(() => setMsgPass(""), 3000);
   }
-  const filtrados = db.personagens.filter(p => p.nome.toLowerCase().includes(busca.toLowerCase()) || p.whatsapp.includes(busca));
+  const filtrados = (db.personagens || []).filter(p => p.nome.toLowerCase().includes(busca.toLowerCase()) || (p.whatsapp || "").includes(busca));
   return /*#__PURE__*/React.createElement("div", {
     className: "space-y-6"
   }, /*#__PURE__*/React.createElement(Section, {
-    title: "Painel de Controle da Administra\xE7\xE3o & Comandante Supremo",
-    subtitle: "Gest\xE3o completa de jogadores, hierarquia de ADMs, afazeres e arbitragem com IA",
-    right: /*#__PURE__*/React.createElement("div", {
-      className: "flex flex-wrap gap-2"
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => setShowChangePassword(!showChangePassword),
-      className: "px-3 py-1.5 bg-bleach-panel2 border border-bleach-border text-bleach-orange rounded text-xs font-semibold"
-    }, "\uD83D\uDD11 Alterar Senha ADM"))
+    title: isMaxAdm ? "Painel do ADM Máximo (Comandante Supremo)" : `Painel Administrativo (${session?.nome || "Sub-ADM"})`,
+    subtitle: isMaxAdm ? "Acesso total irrestrito: gestão de outros ADMs, exclusão de perfis e regras" : `Cargo: ${session?.cargo || "Administrador"}`
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-2 border-b border-bleach-borderSoft pb-3 mb-4"
-  }, [{
+  }, isMaxAdm && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAbaAdmin("maximo"),
+    className: `px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${abaAdmin === "maximo" ? "bg-yellow-500 text-black font-extrabold shadow" : "bg-bleach-panel2 border border-bleach-border text-yellow-400 hover:text-white"}`
+  }, "\uD83D\uDC51 ADM M\xE1ximo & Gest\xE3o"), [{
     id: "fichas",
     label: "👥 Fichas dos Players"
-  }, {
-    id: "adms",
-    label: "👑 Gestão de ADMs"
   }, {
     id: "tarefas",
     label: "📋 Afazeres & Ganhos de ADM"
@@ -3004,24 +3168,116 @@ function AdminPanel({
     key: t.id,
     onClick: () => setAbaAdmin(t.id),
     className: `px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${abaAdmin === t.id ? "bg-bleach-orange text-black font-extrabold shadow" : "bg-bleach-panel2 border border-bleach-border text-bleach-creamDim hover:text-white"}`
-  }, t.label))), showChangePassword && /*#__PURE__*/React.createElement("div", {
-    className: "bg-bleach-panel2 border border-bleach-orange/40 rounded-lg p-4 mb-4 space-y-2"
+  }, t.label)))), isMaxAdm && abaAdmin === "maximo" && /*#__PURE__*/React.createElement("div", {
+    className: "space-y-6"
+  }, /*#__PURE__*/React.createElement(Section, {
+    title: "\uD83D\uDC51 Gest\xE3o de Administradores & Acesso M\xE1ximo",
+    subtitle: "Adicione novos Sub-ADMs com login e senha individuais, e gerencie as permiss\xF5es do RPG"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-yellow-950/40 border border-yellow-500/60 rounded-xl p-4 flex flex-col justify-between"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] font-bold uppercase px-2 py-0.5 rounded border text-yellow-400 border-yellow-500 bg-yellow-950"
+  }, "\uD83D\uDC51 ADM M\xE1ximo (Voc\xEA)"), /*#__PURE__*/React.createElement("h4", {
+    className: "font-bold text-white text-base mt-2"
+  }, "Comandante Supremo"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-bleach-creamDim mt-1"
+  }, "Acesso total e irrestrito a todos os sistemas e exclus\xE3o de fichas."))), (db.subAdms || []).map(adm => /*#__PURE__*/React.createElement("div", {
+    key: adm.id,
+    className: "bg-bleach-panel2 border border-bleach-border rounded-xl p-4 flex flex-col justify-between"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] font-bold uppercase px-2 py-0.5 rounded border text-bleach-orange border-bleach-orange bg-black"
+  }, "\uD83D\uDEE1\uFE0F Sub-ADM"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => removerSubAdm(adm.id),
+    className: "text-red-400 text-xs hover:underline"
+  }, "Excluir Acesso")), /*#__PURE__*/React.createElement("h4", {
+    className: "font-bold text-bleach-cream text-base"
+  }, adm.nome), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-bleach-muted mt-1"
+  }, /*#__PURE__*/React.createElement("span", null, "Usu\xE1rio: ", /*#__PURE__*/React.createElement("strong", {
+    className: "text-white font-mono"
+  }, adm.usuario)), " \u2022", /*#__PURE__*/React.createElement("span", {
+    className: "ml-1"
+  }, "Senha: ", /*#__PURE__*/React.createElement("strong", {
+    className: "text-bleach-orange font-mono"
+  }, adm.senha))), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-bleach-creamDim mt-1"
+  }, "Cargo: ", adm.cargo))))), /*#__PURE__*/React.createElement("div", {
+    className: "bg-black/50 border border-bleach-borderSoft p-5 rounded-xl space-y-3"
   }, /*#__PURE__*/React.createElement("h4", {
-    className: "text-xs font-bold text-bleach-orange uppercase"
-  }, "Alterar Senha do Administrador"), /*#__PURE__*/React.createElement("div", {
-    className: "flex gap-2"
+    className: "text-xs font-bold uppercase tracking-wider text-bleach-orange"
+  }, "+ Criar Login para Novo Sub-ADM"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3"
   }, /*#__PURE__*/React.createElement("input", {
     type: "text",
-    placeholder: "Nova senha do ADM",
-    value: novaSenha,
-    onChange: e => setNovaSenha(e.target.value),
-    className: "flex-1 bg-black border border-bleach-border rounded px-3 py-1.5 text-xs text-white"
+    placeholder: "Nome do Administrador",
+    value: novoSubAdm.nome,
+    onChange: e => setNovoSubAdm({
+      ...novoSubAdm,
+      nome: e.target.value
+    }),
+    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white"
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "Usu\xE1rio de Login (Ex: kisuke)",
+    value: novoSubAdm.usuario,
+    onChange: e => setNovoSubAdm({
+      ...novoSubAdm,
+      usuario: e.target.value
+    }),
+    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white font-mono"
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    placeholder: "Senha Individual",
+    value: novoSubAdm.senha,
+    onChange: e => setNovoSubAdm({
+      ...novoSubAdm,
+      senha: e.target.value
+    }),
+    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white"
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "Cargo (ex: Juiz de Lutas)",
+    value: novoSubAdm.cargo,
+    onChange: e => setNovoSubAdm({
+      ...novoSubAdm,
+      cargo: e.target.value
+    }),
+    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white"
+  }), /*#__PURE__*/React.createElement("select", {
+    value: novoSubAdm.charId,
+    onChange: e => setNovoSubAdm({
+      ...novoSubAdm,
+      charId: e.target.value
+    }),
+    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white"
+  }, (db.personagens || []).map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, "Ficha: ", p.nome)))), /*#__PURE__*/React.createElement("button", {
+    onClick: adicionarSubAdm,
+    className: "px-5 py-2.5 bg-bleach-orange text-black font-extrabold text-xs uppercase rounded-lg hover:bg-orange-400 shadow"
+  }, "Cadastrar Sub-ADM com Login Pr\xF3prio")), /*#__PURE__*/React.createElement("div", {
+    className: "bg-black/50 border border-bleach-borderSoft p-5 rounded-xl space-y-3 mt-4"
+  }, /*#__PURE__*/React.createElement("h4", {
+    className: "text-xs font-bold uppercase tracking-wider text-yellow-400"
+  }, "\uD83D\uDD11 Alterar Senha Mestra do ADM M\xE1ximo"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-3 max-w-md"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "Nova Senha Mestra",
+    value: novaSenhaMax,
+    onChange: e => setNovaSenhaMax(e.target.value),
+    className: "flex-1 bg-bleach-panel2 border border-bleach-border rounded px-3 py-2 text-xs text-white font-mono"
   }), /*#__PURE__*/React.createElement("button", {
-    onClick: alterarSenhaAdmin,
-    className: "px-4 py-1.5 bg-bleach-orange text-black font-bold text-xs uppercase rounded"
-  }, "Salvar Senha")), msgPass && /*#__PURE__*/React.createElement("div", {
+    onClick: alterarSenhaSuperAdmin,
+    className: "px-4 py-2 bg-yellow-500 text-black font-bold text-xs uppercase rounded hover:bg-yellow-400"
+  }, "Salvar")), msgPass && /*#__PURE__*/React.createElement("div", {
     className: "text-green-400 text-xs"
-  }, msgPass))), abaAdmin === "fichas" && /*#__PURE__*/React.createElement("div", {
+  }, msgPass)))), abaAdmin === "fichas" && /*#__PURE__*/React.createElement("div", {
     className: "space-y-6"
   }, /*#__PURE__*/React.createElement(Section, {
     title: "Criar Novo Personagem no Site",
@@ -3098,8 +3354,8 @@ function AdminPanel({
     type: "submit",
     className: "bg-gradient-to-r from-bleach-orange to-bleach-orangeDeep text-black font-extrabold text-xs uppercase tracking-wider rounded-lg py-2 hover:brightness-110"
   }, "+ Criar Ficha com Login"))), /*#__PURE__*/React.createElement(Section, {
-    title: `Fichas Registradas (${db.personagens.length})`,
-    subtitle: "Selecione um jogador para gerenciar"
+    title: `Fichas Registradas (${(db.personagens || []).length})`,
+    subtitle: "Selecione um jogador para gerenciar ou apagar"
   }, /*#__PURE__*/React.createElement("div", {
     className: "mb-4"
   }, /*#__PURE__*/React.createElement("input", {
@@ -3144,9 +3400,9 @@ function AdminPanel({
     }, p.sorteiosComunsRestantes || 0, " comuns"), " \u2022 ", /*#__PURE__*/React.createElement("strong", {
       className: "text-purple-400"
     }, p.sorteiosEspeciaisRestantes || 0, " esp"))))), /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-bleach-borderSoft"
+      className: "flex items-center gap-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-bleach-borderSoft"
     }, /*#__PURE__*/React.createElement("div", {
-      className: "text-right"
+      className: "text-right mr-2"
     }, /*#__PURE__*/React.createElement("div", {
       className: "text-[10px] text-bleach-muted uppercase"
     }, "Pontos Livres"), /*#__PURE__*/React.createElement("div", {
@@ -3154,66 +3410,32 @@ function AdminPanel({
     }, p.pontosDisponiveis || 0)), /*#__PURE__*/React.createElement("button", {
       onClick: () => onAbrirFicha(p.id),
       className: "px-4 py-2 bg-bleach-orange text-black font-extrabold text-xs uppercase tracking-wider rounded-lg shadow hover:bg-orange-400 transition"
-    }, "Gerenciar Ficha \u2192")));
-  })))), abaAdmin === "adms" && /*#__PURE__*/React.createElement("div", {
-    className: "space-y-6"
-  }, /*#__PURE__*/React.createElement(Section, {
-    title: "Gest\xE3o de Administradores (ADM M\xE1ximo)",
-    subtitle: "Controle quem possui acesso \xE0 administra\xE7\xE3o e seus cargos"
+    }, "Gerenciar Ficha \u2192"), isMaxAdm && /*#__PURE__*/React.createElement("button", {
+      onClick: () => setCharParaDeletar(p),
+      className: "px-3 py-2 bg-red-950/60 border border-red-500/50 hover:bg-red-800 text-red-200 font-bold text-xs uppercase rounded-lg transition",
+      title: "Apagar Perfil de Jogador"
+    }, "\uD83D\uDDD1\uFE0F Apagar")));
+  }))), charParaDeletar && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"
-  }, db.administradores.map(adm => /*#__PURE__*/React.createElement("div", {
-    key: adm.id,
-    className: "bg-bleach-panel2 border border-bleach-border rounded-xl p-4 flex flex-col justify-between"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between mb-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: `text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${adm.nivel === "maximo" ? "text-yellow-400 border-yellow-500 bg-yellow-950/40" : "text-bleach-orange border-bleach-orange bg-black"}`
-  }, adm.nivel === "maximo" ? "👑 ADM Máximo" : "🛡️ ADM"), adm.nivel !== "maximo" && /*#__PURE__*/React.createElement("button", {
-    onClick: () => removerSubAdm(adm.id),
-    className: "text-red-400 text-xs hover:underline"
-  }, "Remover")), /*#__PURE__*/React.createElement("h4", {
-    className: "font-bold text-bleach-cream text-base"
-  }, adm.nome), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs text-bleach-muted mt-1"
-  }, adm.cargo))))), /*#__PURE__*/React.createElement("div", {
-    className: "bg-black/50 border border-bleach-borderSoft p-4 rounded-xl space-y-3"
-  }, /*#__PURE__*/React.createElement("h4", {
-    className: "text-xs font-bold uppercase tracking-wider text-bleach-orange"
-  }, "+ Nomear Novo Administrador"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-1 sm:grid-cols-3 gap-3"
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "text",
-    placeholder: "Nome do ADM",
-    value: novoSubAdm.nome,
-    onChange: e => setNovoSubAdm({
-      ...novoSubAdm,
-      nome: e.target.value
-    }),
-    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white"
-  }), /*#__PURE__*/React.createElement("input", {
-    type: "text",
-    placeholder: "Cargo (ex: Juiz de Lutas & Cenas)",
-    value: novoSubAdm.cargo,
-    onChange: e => setNovoSubAdm({
-      ...novoSubAdm,
-      cargo: e.target.value
-    }),
-    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white"
-  }), /*#__PURE__*/React.createElement("select", {
-    value: novoSubAdm.charId,
-    onChange: e => setNovoSubAdm({
-      ...novoSubAdm,
-      charId: e.target.value
-    }),
-    className: "bg-bleach-panel2 border border-bleach-border rounded p-2 text-xs text-white"
-  }, db.personagens.map(p => /*#__PURE__*/React.createElement("option", {
-    key: p.id,
-    value: p.id
-  }, "Ficha: ", p.nome)))), /*#__PURE__*/React.createElement("button", {
-    onClick: adicionarSubAdm,
-    className: "px-4 py-2 bg-bleach-orange text-black font-bold text-xs uppercase rounded-lg hover:bg-orange-400"
-  }, "Adicionar Administrador")))), abaAdmin === "tarefas" && /*#__PURE__*/React.createElement("div", {
+    className: "bg-bleach-panel border-2 border-red-500 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-4xl mb-2"
+  }, "\u26A0\uFE0F"), /*#__PURE__*/React.createElement("h3", {
+    className: "font-title text-2xl text-red-400 tracking-wider mb-2"
+  }, "APAGAR PERFIL DE JOGADOR"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-bleach-creamDim mb-4 leading-relaxed"
+  }, "Tem certeza que deseja apagar permanentemente a ficha de ", /*#__PURE__*/React.createElement("strong", {
+    className: "text-white"
+  }, charParaDeletar.nome), "? Todos os atributos, hist\xF3rico e progresso ser\xE3o apagados definitivamente."), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setCharParaDeletar(null),
+    className: "flex-1 py-2 bg-bleach-panel2 border border-bleach-border text-xs text-bleach-cream rounded-lg hover:border-bleach-orange font-bold uppercase"
+  }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
+    onClick: confirmarExclusaoChar,
+    className: "flex-1 py-2 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg font-extrabold uppercase shadow"
+  }, "Sim, Apagar Ficha"))))), abaAdmin === "tarefas" && /*#__PURE__*/React.createElement("div", {
     className: "space-y-6"
   }, /*#__PURE__*/React.createElement(Section, {
     title: "Afazeres do ADM & Distribui\xE7\xE3o de Ganhos",
@@ -3294,20 +3516,18 @@ function AdminPanel({
     className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-[11px] text-bleach-creamDim mb-1"
-  }, "Nome do ADM"), /*#__PURE__*/React.createElement("select", {
+  }, "Nome do ADM"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
     value: admExecutor,
     onChange: e => setAdmExecutor(e.target.value),
     className: "w-full bg-black border border-bleach-border rounded p-2 text-xs text-white"
-  }, db.administradores.map(a => /*#__PURE__*/React.createElement("option", {
-    key: a.id,
-    value: a.nome
-  }, a.nome)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-[11px] text-bleach-creamDim mb-1"
   }, "Ficha de Destino dos Pontos"), /*#__PURE__*/React.createElement("select", {
     value: charAlvoAdm,
     onChange: e => setCharAlvoAdm(e.target.value),
     className: "w-full bg-black border border-bleach-border rounded p-2 text-xs text-white"
-  }, db.personagens.map(p => /*#__PURE__*/React.createElement("option", {
+  }, (db.personagens || []).map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
   }, p.nome))))), /*#__PURE__*/React.createElement("button", {
@@ -3345,7 +3565,7 @@ function AdminPanel({
     value: iaLutador1,
     onChange: e => setIaLutador1(e.target.value),
     className: "w-full bg-black border border-bleach-border rounded-lg p-2.5 text-xs text-white"
-  }, db.personagens.map(p => /*#__PURE__*/React.createElement("option", {
+  }, (db.personagens || []).map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.nome
   }, p.nome)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
@@ -3354,7 +3574,7 @@ function AdminPanel({
     value: iaLutador2,
     onChange: e => setIaLutador2(e.target.value),
     className: "w-full bg-black border border-bleach-border rounded-lg p-2.5 text-xs text-white"
-  }, db.personagens.map(p => /*#__PURE__*/React.createElement("option", {
+  }, (db.personagens || []).map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.nome
   }, p.nome))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
@@ -3402,7 +3622,7 @@ function AdminPanel({
     value: dadoChar,
     onChange: e => setDadoChar(e.target.value),
     className: "w-full bg-black border border-bleach-border rounded-lg p-2.5 text-xs text-white"
-  }, db.personagens.map(p => /*#__PURE__*/React.createElement("option", {
+  }, (db.personagens || []).map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.nome
   }, p.nome)))), /*#__PURE__*/React.createElement("button", {
@@ -3444,7 +3664,7 @@ function AdminPanel({
   }, r.data))))))));
 }
 
-// COMPLETE RPG SYSTEMS & MANUAL VIEW (UPDATED WITH ON TRAINING 30 LINES, AI ZANPAKUTO NARRATIVE, GACHA REWARDS)
+// COMPLETE RPG SYSTEMS & MANUAL VIEW
 const SISTEMAS_DATA = [{
   id: "s1",
   t: "1. Conceito do Sistema",
